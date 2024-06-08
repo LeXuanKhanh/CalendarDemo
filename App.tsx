@@ -24,6 +24,7 @@ import {
   LearnMoreLinks,
   ReloadInstructions,
 } from 'react-native/Libraries/NewAppScreen';
+import ExpandableCalendarScreen from './src/screens/expandableCalendarScreen';
 
 type SectionProps = PropsWithChildren<{
   title: string;
