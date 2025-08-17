@@ -10,10 +10,9 @@ The `ExpandableCalendarScreen` now includes a comprehensive date range selection
 
 #### How to Use:
 
-1. **Select Start Date**: Tap on any date to start the selection
-2. **Select End Date**: Tap on another date to complete the range
-3. **Same Date Selection**: Tap the same date twice to select a single day
-4. **Clear Selection**: Use the "Clear Selection" button to reset
+1. **Single Day Selection**: First tap creates a single day selection
+2. **Range Extension**: Subsequent taps extend the range backward or forward
+3. **Clear Selection**: Use the "Clear Selection" button to reset
 
 #### Features:
 
@@ -29,6 +28,7 @@ The `ExpandableCalendarScreen` now includes a comprehensive date range selection
 - Implements `onDayPress` handler for date selection logic
 - Uses `onMonthChange` to fix the month switching bug
 - Dynamic `markedDates` generation based on selected range
+- **Day.js Integration**: Modern, immutable date handling with excellent performance
 - Responsive UI with clear visual feedback
 
 #### Bug Fixes:

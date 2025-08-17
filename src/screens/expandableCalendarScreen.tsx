@@ -13,7 +13,14 @@ import {
   AgendaList,
   CalendarProvider,
   WeekCalendar,
+  DateData,
 } from 'react-native-calendars';
+import dayjs from 'dayjs';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+
+dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrAfter);
 import testIDs from '../testIDs';
 import {agendaItems, getMarkedDates} from '../mocks/agendaItems';
 import AgendaItem from '../mocks/AgendaItem';
@@ -21,7 +28,28 @@ import {getTheme, themeColor, lightThemeColor} from '../mocks/theme';
 
 const leftArrowIcon = require('../img/previous.png');
 const rightArrowIcon = require('../img/next.png');
-const ITEMS: any[] = agendaItems;
+
+// Define types for agenda items
+interface AgendaDataItem {
+  hour: string;
+  duration: string;
+  title: string;
+}
+
+interface AgendaItem {
+  title: string;
+  data: (AgendaDataItem | Record<string, never>)[];
+}
+
+// Define types for marked dates
+interface MarkedDate {
+  startingDay?: boolean;
+  endingDay?: boolean;
+  color?: string;
+  textColor?: string;
+}
+
+const ITEMS: AgendaItem[] = agendaItems;
 
 interface Props {
   weekView?: boolean;
@@ -37,122 +65,128 @@ const ExpandableCalendarScreen = (props: Props) => {
   });
 
   // State for date range selection
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
-  const [current, setCurrent] = useState('2025-01-01');
+  const [startDate, setStartDate] = useState<dayjs.Dayjs | null>(null);
+  const [endDate, setEndDate] = useState<dayjs.Dayjs | null>(null);
+  const [current, setCurrent] = useState(dayjs().format('YYYY-MM-DD'));
+
+  // Date range selection logic:
+  // 1. No dates: First tap creates single day selection (both startDate and endDate)
+  // 2. Both dates: Subsequent taps extend existing range based on date position
+  // Note: current state only changes when user navigates between months
 
   // Generate marked dates for the date range
   const markedDates = useMemo(() => {
-    const dates: any = {};
+    const dates: Record<string, MarkedDate> = {};
 
     if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-
-      // Ensure start is before or equal to end
-      let actualStart = start;
-      let actualEnd = end;
-      if (start > end) {
-        actualStart = end;
-        actualEnd = start;
-      }
-
-      const currentDate = new Date(actualStart);
-
-      while (currentDate <= actualEnd) {
-        const dateString = currentDate.toISOString().split('T')[0];
-        const isStart = dateString === actualStart.toISOString().split('T')[0];
-        const isEnd = dateString === actualEnd.toISOString().split('T')[0];
-
+      // Check if it's a single day selection or a range
+      if (startDate.isSame(endDate, 'day')) {
+        // Single day selection
+        const dateString = startDate.format('YYYY-MM-DD');
         dates[dateString] = {
-          startingDay: isStart,
-          endingDay: isEnd,
+          startingDay: true,
+          endingDay: true,
           color: 'green',
           textColor: 'white',
         };
+      } else {
+        // Range selection
+        // Ensure start is before or equal to end
+        let actualStart = startDate;
+        let actualEnd = endDate;
+        if (startDate.isAfter(endDate, 'day')) {
+          actualStart = endDate;
+          actualEnd = startDate;
+        }
 
-        currentDate.setDate(currentDate.getDate() + 1);
+        // Mark all dates in the range
+        let currentDate = actualStart;
+        while (currentDate.isSameOrBefore(actualEnd, 'day')) {
+          const dateString = currentDate.format('YYYY-MM-DD');
+          const isStart = dateString === actualStart.format('YYYY-MM-DD');
+          const isEnd = dateString === actualEnd.format('YYYY-MM-DD');
+
+          dates[dateString] = {
+            startingDay: isStart,
+            endingDay: isEnd,
+            color: 'green',
+            textColor: 'white',
+          };
+
+          currentDate = currentDate.add(1, 'day');
+        }
       }
-    } else if (startDate && !endDate) {
-      // Only start date selected - show as single selection
-      dates[startDate] = {
-        selected: true,
-        selectedColor: 'blue',
-        selectedTextColor: 'white',
-      };
     }
 
     return dates;
   }, [startDate, endDate]);
 
-  const onDateChanged = useCallback((date: any, updateSource: any) => {
+  const onDateChanged = useCallback((date: string, updateSource: string) => {
     console.log('ExpandableCalendarScreen onDateChanged: ', date, updateSource);
-    //setCurrent(date);
   }, []);
 
-  const onMonthChange = useCallback(({dateString}: {dateString: any}) => {
+  const onMonthChange = useCallback(({dateString}: {dateString: string}) => {
     console.log('ExpandableCalendarScreen onMonthChange: ', dateString);
 
     // Fix the bug: when switching months, the calendar automatically selects the first day
     // Set both startDate and endDate to the first day of the new month
     if (dateString) {
-      const firstDayOfMonth = new Date(dateString);
-      firstDayOfMonth.setDate(1);
-      const firstDayString = firstDayOfMonth.toISOString().split('T')[0];
+      const firstDayOfMonth = dayjs(dateString).startOf('month');
 
-      setStartDate(firstDayString);
-      setEndDate(firstDayString);
-      setCurrent(firstDayString);
+      setStartDate(firstDayOfMonth);
+      setEndDate(firstDayOfMonth);
     }
   }, []);
 
   const onDayPress = useCallback(
-    (day: any) => {
-      const {dateString} = day;
+    (day: DateData) => {
+      const newDate = dayjs(day.dateString);
 
-      if (!startDate) {
-        // First selection - set start date
-        setStartDate(dateString);
-        setEndDate(null);
-      } else if (!endDate) {
-        // Second selection - complete the range
-        if (dateString === startDate) {
-          // Same date selected - set both to the same date
-          setEndDate(dateString);
-        } else {
-          // Different date selected - set end date
-          setEndDate(dateString);
-        }
-      } else {
-        // Range already exists - extend the range
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const newDate = new Date(dateString);
-
-        if (newDate < start) {
-          // New date is before start date - extend range backward
-          setStartDate(dateString);
-        } else if (newDate > end) {
-          // New date is after or equal to start date - extend range forward
-          setEndDate(dateString);
-        } else {
-          setStartDate(dateString);
-        }
+      // Case 1: No dates selected - create single day selection
+      if (!startDate && !endDate) {
+        setStartDate(newDate);
+        setEndDate(newDate);
+        return;
       }
 
-      setCurrent(dateString);
+      // Case 2: Both dates selected - extend existing range
+      if (startDate && endDate) {
+        if (newDate.isBefore(startDate, 'day')) {
+          // New date is before start date - extend range backward
+          setStartDate(newDate);
+        } else if (newDate.isAfter(endDate, 'day')) {
+          // New date is after end date - extend range forward
+          setEndDate(newDate);
+        } else if (
+          newDate.isSame(startDate, 'day') ||
+          newDate.isSame(endDate, 'day')
+        ) {
+          // New date is within the range - reset range to start from this day
+          setStartDate(newDate);
+          setEndDate(newDate);
+        } else {
+          setStartDate(newDate);
+        }
+        return;
+      }
     },
     [startDate, endDate],
   );
 
-  const renderItem = useCallback(({item}: any) => {
+  const renderItem = useCallback(({item}: {item: AgendaItem}) => {
     return <AgendaItem item={item} />;
   }, []);
 
   const clearSelection = useCallback(() => {
+    // Reset all date selections to initial state
     setStartDate(null);
     setEndDate(null);
-    setCurrent('2025-01-01');
+  }, []);
+
+  // Utility function to format dates for display
+  const formatDateForDisplay = useCallback((date: dayjs.Dayjs | null) => {
+    if (!date) return 'Not selected';
+    return date.format('MMM DD, YYYY');
   }, []);
 
   return (
@@ -162,21 +196,17 @@ const ExpandableCalendarScreen = (props: Props) => {
         <Text style={styles.dateRangeTitle}>Selected Date Range:</Text>
         <View style={styles.dateRangeInfo}>
           <Text style={styles.dateLabel}>
-            Start: {startDate ? startDate : 'Not selected'}
+            Start: {formatDateForDisplay(startDate)}
           </Text>
           <Text style={styles.dateLabel}>
-            End: {endDate ? endDate : 'Not selected'}
+            End: {formatDateForDisplay(endDate)}
           </Text>
         </View>
         {startDate && endDate && (
           <Text style={styles.rangeInfo}>
-            {(() => {
-              const start = new Date(startDate);
-              const end = new Date(endDate);
-              const diffTime = Math.abs(end.getTime() - start.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-              return `${diffDays} day${diffDays > 1 ? 's' : ''} selected`;
-            })()}
+            {startDate.isSame(endDate, 'day')
+              ? '1 day selected'
+              : `${endDate.diff(startDate, 'day') + 1} days selected`}
           </Text>
         )}
         <TouchableOpacity style={styles.clearButton} onPress={clearSelection}>
@@ -186,16 +216,15 @@ const ExpandableCalendarScreen = (props: Props) => {
 
       <TouchableOpacity
         style={{
-          width: 50,
           height: 30,
           backgroundColor: 'green',
           justifyContent: 'center',
           alignItems: 'center',
         }}
         onPress={() => {
-          setCurrent('2021-01-01');
+          setCurrent(dayjs().add(1, 'month').format('YYYY-MM-DD'));
         }}>
-        <Text>TEST</Text>
+        <Text>Change month</Text>
       </TouchableOpacity>
       <CalendarProvider
         date={current}
@@ -238,8 +267,8 @@ const ExpandableCalendarScreen = (props: Props) => {
           leftArrowImageSource={leftArrowIcon}
           rightArrowImageSource={rightArrowIcon}
           onDayPress={onDayPress}
-          // animateScroll
           closeOnDayPress={false}
+          // animateScroll
         />
         {/* <AgendaList
           sections={ITEMS}
